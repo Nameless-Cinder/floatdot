@@ -1,3 +1,5 @@
+<img src="assets/floatdot.svg" width="96" height="96" alt="FloatDot logo">
+
 # FloatDot — Floating Desktop Widget for ChatGPT
 
 **Your ChatGPT Dot, one click away.**

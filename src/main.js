@@ -5,6 +5,10 @@ const { pathToFileURL } = require('node:url');
 const { PHONE_CSS, AVATAR_BOUNDS } = require('./chatgpt-adapter');
 
 app.setName('FloatDot');
+const APP_ID = 'io.github.m0hamedd.floatdot';
+const ICON_DIR = app.isPackaged ? path.join(process.resourcesPath, 'icons') : path.join(__dirname, '..', 'assets');
+const APP_ICON = path.join(ICON_DIR, 'icon.png');
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 // Keep the original profile location so rebranding preserves sign-in, the
 // selected page and position. The isolated test profile overrides this below.
 app.setPath('userData', path.join(app.getPath('appData'), 'ChatGPT Dot'));
@@ -293,7 +297,7 @@ function installWebGuards(contents) {
     return {
       action: 'allow',
       overrideBrowserWindowOptions: {
-        width: 520, height: 720, parent: win, autoHideMenuBar: true,
+        width: 520, height: 720, parent: win, autoHideMenuBar: true, icon: APP_ICON,
         webPreferences: { partition: PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true, preload: undefined },
       },
     };
@@ -383,23 +387,36 @@ function registerIPC() {
 }
 
 async function createWindow() {
+  app.setAboutPanelOptions({
+    applicationName: 'FloatDot', applicationVersion: app.getVersion(),
+    copyright: 'Copyright (c) 2026 M0hamedd', iconPath: APP_ICON,
+    credits: 'Your ChatGPT Dot, one click away.',
+  });
   preferencesFile = path.join(app.getPath('userData'), 'dot-preferences.json');
   preferences = readPreferences();
   const area = screen.getPrimaryDisplay().workArea;
   const position = preferences.position || { x: area.x + area.width - 88, y: area.y + 100 };
   win = new BrowserWindow({
-    ...fitBounds(position, SIZE.dot, SIZE.dot), title: 'FloatDot',
+    ...fitBounds(position, SIZE.dot, SIZE.dot), title: 'FloatDot', icon: APP_ICON,
     frame: false, transparent: true, backgroundColor: '#00000000', alwaysOnTop: true,
     resizable: false, maximizable: false, fullscreenable: false, hasShadow: false,
     autoHideMenuBar: true, show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
   });
+  if (process.platform === 'win32') {
+    win.setAppDetails({
+      appId: APP_ID, appIconPath: path.join(ICON_DIR, 'icon.ico'), appIconIndex: 0,
+      relaunchDisplayName: 'FloatDot',
+      relaunchCommand: app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`,
+    });
+  }
   if (process.platform === 'darwin') {
-    Menu.setApplicationMenu([
-      { role: 'appMenu' },
+    app.dock.setIcon(APP_ICON);
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+      { role: 'appMenu', label: 'FloatDot' },
       { role: 'editMenu' },
-      { label: 'Window', submenu: [{ label: 'Show Dot', click: () => { win.show(); setExpanded(true); } }] },
-    ]);
+      { label: 'Window', submenu: [{ label: 'Show FloatDot', click: () => { win.show(); setExpanded(true); } }] },
+    ]));
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   } else win.setMenu(null);
   const keepOnTop = () => {

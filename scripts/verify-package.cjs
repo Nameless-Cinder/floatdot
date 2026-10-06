@@ -28,6 +28,11 @@ const crypto = require('node:crypto');
   assert.equal(metadata.license, 'PolyForm-Noncommercial-1.0.0');
   assert.equal(metadata.main, 'src/main.js');
   assert.ok(!metadata.dependencies || Object.keys(metadata.dependencies).length === 0);
+  for (const icon of ['icon.png', 'icon.ico']) {
+    assert.ok(fs.readFileSync(path.join(root, 'dist', 'win-unpacked', 'resources', 'icons', icon))
+      .equals(fs.readFileSync(path.join(root, 'assets', icon))), `Packaged ${icon} differs from the source`);
+  }
+  assert.ok(fs.existsSync(path.join(root, 'dist', 'win-unpacked', 'FloatDot.exe')), 'The Windows executable must be named FloatDot');
   const installer = `floatdot-${metadata.version}-win-x64.exe`;
   const hash = crypto.createHash('sha256');
   for await (const chunk of fs.createReadStream(path.join(root, 'dist', installer))) hash.update(chunk);

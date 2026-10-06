@@ -38,6 +38,21 @@ Wayland desktops require XWayland. See
 
 ## Architecture
 
+The editable app icon is `assets/floatdot.svg`. Generated PNG, Windows ICO, and
+macOS ICNS assets are committed so normal builds need no graphics tools. To
+regenerate on Windows with owned-process cleanup:
+
+```powershell
+& ([scriptblock]::Create((Get-Content -LiteralPath scripts\smoke.ps1 -Raw))) -Icons
+```
+
+On macOS or Linux, `npx electron scripts/build-icons.cjs` regenerates the same
+assets. Runtime icons are copied to `resources/icons/` outside the app archive
+so Windows can read the relaunch icon directly. Packaged executables, installers,
+shortcuts, the macOS bundle/Dock/menu, and window titles use **FloatDot**.
+When developing with `npm start`, the underlying executable remains Electron;
+use a packaged build for the branded executable identity.
+
 - `src/main.js`: floating window, embedded ChatGPT page, position, navigation,
   local preferences, unread state, and animation coordination.
 - `src/preload.js`: narrow IPC bridge for the local interface.

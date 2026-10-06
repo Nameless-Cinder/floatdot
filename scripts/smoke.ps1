@@ -1,4 +1,4 @@
-param([switch]$Restart, [switch]$Interactive, [switch]$Quick, [switch]$Regression, [switch]$Package, [switch]$VerifyPackage)
+param([switch]$Restart, [switch]$Interactive, [switch]$Quick, [switch]$Regression, [switch]$Package, [switch]$VerifyPackage, [switch]$Icons)
 $ErrorActionPreference = 'Stop'
 $scriptDirectory = if ($PSScriptRoot) { $PSScriptRoot } else { Join-Path (Get-Location).Path 'scripts' }
 $project = Split-Path -Parent $scriptDirectory
@@ -53,7 +53,10 @@ $env:DOT_SMOKE_QUICK = if ($Quick) { '1' } else { '' }
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 $ownedJob = $null
 try {
-  if ($VerifyPackage) {
+  if ($Icons) {
+    $iconScript = Join-Path $project 'scripts\build-icons.cjs'
+    $ownedJob = [DotTestJob]::new((Join-Path $project 'node_modules\electron\dist\electron.exe'), ('"' + $iconScript + '"'), $project)
+  } elseif ($VerifyPackage) {
     $nodePath = (Get-Command node.exe).Source
     $verifyPath = Join-Path $project 'scripts\verify-package.cjs'
     $ownedJob = [DotTestJob]::new($nodePath, ('"' + $verifyPath + '"'), $project)

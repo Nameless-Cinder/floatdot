@@ -1,5 +1,6 @@
 appId: io.github.m0hamedd.floatdot
 productName: FloatDot
+copyright: Copyright (c) 2026 M0hamedd
 asar: true
 directories:
   output: dist
@@ -8,18 +9,35 @@ files:
   - package.json
   - LICENSE*
   - NOTICE*
+extraResources:
+  - from: assets
+    to: icons
+    filter:
+      - icon.png
+      - icon.ico
 # Explicitly include only the app. Profiles, diagnostic screenshots, tests,
 # signing credentials and development dependencies must never ship.
 artifactName: "floatdot-${version}-${os}-${arch}.${ext}"
 publish: null
 win:
   target: nsis
+  executableName: FloatDot
+  icon: assets/icon.ico
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
+  shortcutName: FloatDot
+  uninstallDisplayName: FloatDot
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
 mac:
+  executableName: FloatDot
+  icon: assets/icon.icns
+  extendInfo:
+    CFBundleName: FloatDot
+    CFBundleDisplayName: FloatDot
   target:
     - dmg
     - zip
@@ -32,3 +50,4 @@ mac:
 linux:
   target: AppImage
   category: Utility
+  icon: assets/icon.icns
