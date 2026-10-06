@@ -1,18 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 256 256">
   <title>FloatDot</title>
-  <defs>
-    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#262c3b"/>
-      <stop offset="1" stop-color="#10141e"/>
-    </linearGradient>
-    <linearGradient id="ring" x1="0" y1="0" x2="0.9" y2="1">
-      <stop stop-color="#e1e5f5"/>
-      <stop offset="0.55" stop-color="#bac1d3"/>
-      <stop offset="1" stop-color="#98a7ca"/>
-    </linearGradient>
-  </defs>
-  <rect x="16" y="16" width="224" height="224" rx="54" fill="url(#tile)"/>
-  <rect x="17" y="17" width="222" height="222" rx="53" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="2"/>
-  <circle cx="117" cy="138" r="55" fill="none" stroke="url(#ring)" stroke-width="28"/>
-  <circle cx="187" cy="66" r="17" fill="#edf0ff"/>
+  <circle cx="128" cy="128" r="108" fill="#bac1d3"/>
+  <circle cx="128" cy="128" r="44" fill="#0d0d0d"/>
 </svg>
