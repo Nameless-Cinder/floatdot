@@ -1,13 +1,15 @@
 // All assumptions about ChatGPT's DOM live here. No tokens, message text, or
 // network requests leave this isolated preload; IPC carries only URL + count.
 const SELECTORS = {
-  assistant: '[data-message-author-role="assistant"], article.message-row[data-message-id]:not(.self)',
+  assistant: '[data-message-author-role="assistant"]',
   dotMessage: 'article.message-row[data-message-id]',
-  dotContent: '.message-text, .message-bubble',
+  dotAssistant: 'article.message-row[data-message-id]:not(.self)',
+  dotContent: '.message-text',
   message: '[data-message-id]',
   turn: '[data-testid^="conversation-turn-"]',
   user: '[data-message-author-role="user"], article.message-row.self',
   conversation: 'main',
+  unrelated: 'aside, nav, [role="dialog"], [role="alert"], [role="status"], [hidden], [aria-hidden="true"]',
 };
 
 const PHONE_CSS = `
@@ -44,29 +46,28 @@ function installObserver(ipcRenderer) {
   function snapshot() {
     const root = document.querySelector(SELECTORS.conversation);
     if (!root) return { kind: 'none', messages: [] };
-    const assistants = [...root.querySelectorAll(SELECTORS.assistant)];
-    if (assistants.length) {
-      return { kind: 'assistant', messages: assistants.map((element, index) => {
+    // The app shell may also render other chats or notification previews while
+    // the URL stays on the saved Dot. Never mix their assistant roles into the
+    // Dot timeline, even when the timeline is temporarily empty/loading.
+    const dotPage = /^\/dots\/[^/]+\/?$/.test(location.pathname);
+    const selector = dotPage ? SELECTORS.dotAssistant : SELECTORS.assistant;
+    const messages = [...root.querySelectorAll(selector)]
+      .filter(element => !element.closest(SELECTORS.unrelated) && !element.closest(SELECTORS.user))
+      .map(element => {
         const holder = element.closest(SELECTORS.message);
         const turn = element.closest(SELECTORS.turn);
-        const content = element.matches(SELECTORS.dotMessage) ? element.querySelector(SELECTORS.dotContent) : element;
+        // Only the actual Dot reply text can signal streaming. Bubble/card
+        // status labels may update when an unrelated background task finishes.
+        const content = dotPage ? element.querySelector(SELECTORS.dotContent) : element;
         const length = content?.textContent.trim().length || 0;
         return {
-          key: holder?.getAttribute('data-message-id') || turn?.getAttribute('data-testid') || `assistant-slot-${index}`,
+          key: holder?.getAttribute('data-message-id') || turn?.getAttribute('data-testid'),
           ready: length > 0 || !!content?.querySelector('img, audio, video, canvas'),
           length,
         };
-      }) };
-    }
-    // Fallback: substantial new conversation turns, excluding recognizable
-    // user turns. This can count non-assistant content if roles disappear.
-    return { kind: 'heuristic', messages: [...root.querySelectorAll(SELECTORS.turn)]
-      .filter((element) => !element.querySelector(SELECTORS.user))
-      .map((element, index) => ({
-        key: element.getAttribute('data-testid') || `turn-slot-${index}`,
-        ready: element.textContent.trim().length >= 80,
-        length: element.textContent.trim().length,
-      })) };
+      }).filter(item => item.key);
+    // Unknown markup fails quietly rather than guessing from generic page text.
+    return { kind: dotPage ? 'dot' : 'assistant', messages };
   }
 
   function scan(baseline = false) {
@@ -132,7 +133,7 @@ function installObserver(ipcRenderer) {
     if (next !== enabled || location.href !== route) { enabled = next; reset(); }
   });
   const start = () => {
-    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['data-message-author-role', 'data-message-id', 'class'] });
+    observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['data-message-author-role', 'data-message-id', 'class', 'role', 'hidden', 'aria-hidden'] });
     reset();
   };
   if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', start, { once: true });

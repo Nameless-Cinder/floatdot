@@ -13,7 +13,7 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences }) => 
   const run = (code) => chat.webContents.executeJavaScript(code);
   let failed = false;
   try {
-    const fixture = '<!doctype html><main><main id="messages"><article class="message-row" data-message-id="old"><div class="message-body" data-message-id="old"><div class="message-text">Earlier reply</div></div></article></main></main>';
+    const fixture = '<!doctype html><main><main id="messages"><article class="message-row" data-message-id="old"><div class="message-body" data-message-id="old"><div class="message-bubble"><div class="message-text">Earlier reply</div></div></div></article></main></main>';
     await chat.webContents.session.protocol.handle('https', () => new Response(fixture, { headers: { 'content-type': 'text/html' } }));
     await chat.webContents.loadURL('https://chatgpt.com/dots/regression');
     await run('window.liveSentinel = 123');
@@ -95,7 +95,7 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences }) => 
     await win.webContents.executeJavaScript('window.dot.saveCurrent()');
     await sleep(2200);
     const add = async (id, text, self = false, prepend = false) => {
-      const markup = `<article class="message-row${self ? ' self' : ''}" data-message-id="${id}"><div class="message-body" data-message-id="${id}"><div class="message-text">${text}</div></div></article>`;
+      const markup = `<article class="message-row${self ? ' self' : ''}" data-message-id="${id}"><div class="message-body" data-message-id="${id}"><div class="message-bubble"><div class="message-text">${text}</div></div></div></article>`;
       await run(`document.querySelector('#messages').insertAdjacentHTML(${JSON.stringify(prepend ? 'afterbegin' : 'beforeend')}, ${JSON.stringify(markup)})`);
       await sleep(350);
     };
@@ -128,6 +128,50 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences }) => 
     await sleep(350);
     assert.equal(state().unread, 0);
     checks.push('Opening clears unread; collapsing without new text does not count an already visible reply');
+
+    await run(`document.querySelector('main').insertAdjacentHTML('beforeend',
+      '<section id="other-chat"><div data-message-author-role="assistant" data-message-id="other-chat-reply">Reply from another chat</div></section>')`);
+    await sleep(350);
+    assert.equal(state().unread, 0, 'An ordinary assistant reply elsewhere on a Dot page must not increment the badge');
+    await run('document.querySelector("#other-chat div").textContent += " with more streamed text"');
+    await sleep(350);
+    assert.equal(state().unread, 0, 'Streaming in another chat must not increment the Dot badge');
+    checks.push('Other chat replies and streaming on the same page cannot increment the Dot badge');
+
+    await run(`document.querySelector('[data-message-id="visible-reply"] .message-bubble')
+      .insertAdjacentHTML('beforeend', '<span class="task-status">Another task finished</span>')`);
+    await sleep(350);
+    assert.equal(state().unread, 0, 'Task/card metadata outside the Dot message text is not a new reply');
+    await run(`document.querySelector('main').insertAdjacentHTML('beforeend',
+      '<aside><article class="message-row" data-message-id="sidebar-notification"><div class="message-text">Other chat preview</div></article></aside>')`);
+    await sleep(350);
+    assert.equal(state().unread, 0, 'Sidebar notification previews are not Dot messages');
+    checks.push('Task metadata and sidebar message previews do not produce unread replies');
+
+    await add('dot-after-other-chat', 'A real new Dot reply');
+    assert.equal(state().unread, 1, 'Filtering unrelated content must preserve real Dot reply notifications');
+    await setExpanded(true);
+    await setExpanded(false);
+    await run(`document.querySelector('#messages').replaceChildren();
+      document.querySelector('#other-chat').insertAdjacentHTML('beforeend',
+        '<div data-testid="conversation-turn-999">' + 'Unrelated unmarked content '.repeat(10) + '</div>')`);
+    await sleep(350);
+    await run(`document.querySelector('#other-chat').insertAdjacentHTML('beforeend',
+      '<div data-message-author-role="assistant" data-message-id="other-chat-reply-2">More unrelated content</div>')`);
+    await sleep(350);
+    assert.equal(state().unread, 0, 'A missing Dot timeline must not fall back to ordinary chats or generic page content');
+    checks.push('Real Dot replies still count; a missing Dot timeline fails quietly');
+
+    await chat.webContents.loadURL('https://chatgpt.com/c/notification-scope');
+    await run(`document.querySelector('#messages').innerHTML =
+      '<div data-message-author-role="assistant" data-message-id="regular-old">Earlier regular reply</div>'`);
+    await win.webContents.executeJavaScript('window.dot.saveCurrent()');
+    await sleep(2200);
+    await run(`document.querySelector('#messages').insertAdjacentHTML('beforeend',
+      '<div data-message-author-role="assistant" data-message-id="regular-new">A regular reply</div>')`);
+    await sleep(350);
+    assert.equal(state().unread, 1, 'Explicitly saved regular conversations must still receive their own reply badges');
+    checks.push('A saved regular conversation retains its own assistant reply notifications');
     await sleep(300);
     const saved = JSON.parse(fs.readFileSync(path.join(process.env.DOT_SMOKE_PROFILE, 'dot-preferences.json'), 'utf8'));
     assert.deepEqual(saved.position, anchor);

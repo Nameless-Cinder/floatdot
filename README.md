@@ -126,6 +126,8 @@ screens, and desktop-specific window rules can override that behavior.
 No. The badge observes detected assistant replies on the selected, loaded page
 while the dot is collapsed. Opening FloatDot clears the badge. It is not an
 account-wide notification service, and it cannot detect replies while quit.
+On a Dot page, ordinary chat replies, sidebar previews, and task-status changes
+outside the Dot reply text are ignored.
 
 Unread detection depends on website markup. Some edits, regenerations, or
 virtualized history can be missed or miscounted. See the

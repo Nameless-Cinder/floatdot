@@ -56,9 +56,12 @@ data. Development test profile overrides are disabled in packaged applications.
 
 ## Compatibility and verification
 
-Dot replies currently use `article.message-row[data-message-id]:not(.self)`;
-regular chat replies use `[data-message-author-role="assistant"]`. The fallback
-counts substantial unmarked conversation turns and can misidentify responses.
+Dot routes use only `article.message-row[data-message-id]:not(.self)` and their
+`.message-text` content. Regular chat routes use
+`[data-message-author-role="assistant"]`. Sidebar, dialog, alert, and hidden
+content is excluded. Other chats rendered on a Dot page and task metadata
+outside a Dot reply's text cannot contribute to its badge. Unrecognized markup
+fails quietly; there is no fallback that guesses from generic page text.
 
 Unread detection and avatar matching are best effort. Initial history is
 baselined for 1.8 seconds; responses during that period, virtualized history,
