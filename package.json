@@ -1,0 +1,33 @@
+{
+  "name": "floatdot",
+  "productName": "FloatDot",
+  "version": "0.1.0",
+  "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "description": "Your ChatGPT Dot, one click away. An unofficial floating desktop widget for ChatGPT.",
+  "author": "M0hamedd",
+  "homepage": "https://github.com/M0hamedd/floatdot#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/M0hamedd/floatdot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/M0hamedd/floatdot/issues"
+  },
+  "main": "src/main.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "postinstall": "install-electron",
+    "start": "electron .",
+    "pack": "electron-builder --dir --publish never",
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "dist:mac": "electron-builder --mac --x64 --arm64 --publish never",
+    "dist:linux": "electron-builder --linux --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  }
+}

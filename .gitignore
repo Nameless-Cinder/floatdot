@@ -1,0 +1,17 @@
+node_modules/
+.smoke/
+*.log
+dist/
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+.DS_Store
+Thumbs.db
+dot-preferences.json
+Partitions/
+Session Storage/
+Local Storage/
+Cookies*

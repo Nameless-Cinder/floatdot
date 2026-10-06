@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'">
+  <title>FloatDot</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <button id="dot" aria-label="Open FloatDot" title="Click to open · Drag to move · Right-click for menu">
+    <span class="orb"></span><span id="badge" hidden></span>
+  </button>
+  <section id="phone" hidden>
+    <button id="titlebar" aria-label="Collapse to dot" title="Click to collapse · Drag to move · Right-click for menu">
+      <span class="collapse-chevron" aria-hidden="true"></span>
+      <span class="collapse-label">Click to collapse</span>
+    </button>
+    <div class="toolbar">
+      <button id="save">Set current page as my Dot</button>
+      <span id="status" role="status"></span>
+    </div>
+    <div class="loading">Loading ChatGPT…</div>
+    <img id="preview" alt="" hidden>
+  </section>
+  <script src="app.js"></script>
+</body>
+</html>

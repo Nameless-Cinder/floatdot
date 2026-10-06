@@ -1,0 +1,53 @@
+name: Build desktop downloads
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - platform: Windows
+            runner: windows-latest
+            command: npm run dist:win
+          - platform: macOS
+            runner: macos-latest
+            command: npm run dist:mac
+          - platform: Linux
+            runner: ubuntu-24.04
+            command: npm run dist:linux
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: ${{ matrix.command }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: floatdot-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.AppImage
+# Builds downloadable artifacts for review. This workflow does not publish
+# a release or claim that a build has passed a real desktop acceptance test.

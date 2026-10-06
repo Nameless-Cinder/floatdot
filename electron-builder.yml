@@ -1,0 +1,34 @@
+appId: io.github.m0hamedd.floatdot
+productName: FloatDot
+asar: true
+directories:
+  output: dist
+files:
+  - src/**/*
+  - package.json
+  - LICENSE*
+  - NOTICE*
+# Explicitly include only the app. Profiles, diagnostic screenshots, tests,
+# signing credentials and development dependencies must never ship.
+artifactName: "floatdot-${version}-${os}-${arch}.${ext}"
+publish: null
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+  # Local/CI developer builds only. Public macOS distribution needs a
+  # Developer ID identity and notarization configured by the maintainer.
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false
+linux:
+  target: AppImage
+  category: Utility
