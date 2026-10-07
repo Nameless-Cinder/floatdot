@@ -14,7 +14,7 @@ OpenAI, and does not include a ChatGPT account or subscription.
 
 [Get started](#get-started) · [Features](#features) · [Platforms](#platforms) ·
 [FAQs](#frequently-asked-questions) · [Privacy](docs/PRIVACY.md) ·
-[License](#license)
+[Support](#support-floatdot) · [License](#license)
 
 ## Features
 
@@ -223,6 +223,16 @@ For bugs or feature requests, [open an issue](https://github.com/M0hamedd/floatd
 with your operating system, app version, steps to reproduce, and expected
 behavior. Remove conversation text, account details, and tokens from screenshots
 and logs before attaching them.
+
+## Support FloatDot
+
+If FloatDot makes your day a little easier, you can
+[support its development on Ko-fi](https://ko-fi.com/namelesscinder).
+Donations are entirely optional and help with ongoing development and maintenance.
+
+[![Support FloatDot on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/namelesscinder)
+
+Sharing FloatDot, reporting bugs, and suggesting improvements also help. Thank you!
 
 ## License
 
