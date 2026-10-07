@@ -38,6 +38,8 @@ mac:
   extendInfo:
     CFBundleName: FloatDot
     CFBundleDisplayName: FloatDot
+    NSMicrophoneUsageDescription: Allow ChatGPT voice features when you approve microphone access in FloatDot.
+    NSCameraUsageDescription: Allow ChatGPT camera features when you approve camera access in FloatDot.
   target:
     - dmg
     - zip

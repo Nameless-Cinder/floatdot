@@ -56,6 +56,8 @@ use a packaged build for the branded executable identity.
 - `src/main.js`: floating window, embedded ChatGPT page, position, navigation,
   local preferences, unread state, and animation coordination.
 - `src/preload.js`: narrow IPC bridge for the local interface.
+- `src/web-policy.js`: embedded navigation allowlist and default-deny browser
+  permissions, with explicit consent for ChatGPT microphone/camera access.
 - `src/chatgpt-adapter.js`: website layout adjustments, avatar detection, and
   assistant-reply observation.
 - `src/renderer/`: dot, badge, collapse bar, and animated transitions.
@@ -63,7 +65,11 @@ use a packaged build for the branded executable identity.
 The dot is 48 by 48 logical pixels; the expanded window is up to 380 by 680.
 Animations use a temporary in-memory image while keeping the same page alive.
 Reduced motion skips animation. Windows uses software compositing for
-transparent-window compatibility. Collapsed pages continue consuming memory.
+transparent-window compatibility. Memory saver closes the remote WebContentsView
+after 60 seconds collapsed and recreates it on demand using the same persistent
+session. Live updates keeps it loaded. Pending drafts, known response indicators,
+audio, granted media access and login popups defer sleep. No V8 heap limits or
+forced operating-system memory trimming are used.
 
 The display name is FloatDot. The profile directory remains `ChatGPT Dot` and
 the browser partition remains `persist:chatgpt-dot` to preserve existing user
@@ -98,6 +104,16 @@ Object. It cleans up its entire process tree after success, failure, or timeout:
 
 `-Quick` opens an isolated app for manual inspection, `-Package` builds the
 Windows installer, and `-VerifyPackage` checks its file list and source contents.
+`-Security` checks permission boundaries, URL lookalikes and consent races.
+`-Memory` checks the actual 60-second timer, renderer process exit, draft guards,
+mode persistence, wake-up, retained browser storage and operating-system Close.
+Memory figures from this test use a synthetic page with a 64 MiB allocation;
+they are not a benchmark of a signed-in ChatGPT session.
+With no switch the harness runs basic smoke checks; `-Restart` then checks
+saved preferences and browser storage. The build workflow runs security checks
+on every platform and the smoke, restart and regression suites on Windows.
+The Windows workflow also runs the memory lifecycle suite. See the
+[release review](RELEASE-AUDIT.md) for the latest local results and unverified areas.
 Results and preserved failures stay in `.smoke/`. Never use a real account in
 tests. Verify owned test processes have exited before retrying or finishing.
 

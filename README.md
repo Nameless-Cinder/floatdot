@@ -22,10 +22,12 @@ OpenAI, and does not include a ChatGPT account or subscription.
   open your selected conversation with a click.
 - **Put it where you want:** drag the dot anywhere; its position is remembered
   independently of the expanded window.
-- **Expand and collapse:** animated transitions keep the same live page open;
-  the app respects reduced-motion preferences.
+- **Expand and collapse:** animated transitions respect reduced-motion
+  preferences. In Live updates mode, the same page stays loaded.
 - **Unread replies:** a badge indicates detected new assistant replies on your
   selected page while the dot is collapsed.
+- **Choose your memory use:** Memory saver unloads an idle page after 60 seconds;
+  Live updates keeps it loaded to continue checking for replies.
 - **A familiar appearance:** the dot samples the visible avatar when available,
   with a lavender ring as its fallback.
 - **Your own account:** sign in through ChatGPT's website and choose your own Dot
@@ -69,9 +71,28 @@ Electron; no separate frontend build is needed.
 | Toggle on Windows / Linux | **Ctrl+Shift+D** |
 | Toggle on macOS | **Command+Shift+D** |
 | Exit completely | Right-click → **Quit FloatDot** |
+| Exit with keyboard / system Close | **Ctrl+Q** / **Command+Q**, **Alt+F4** on Windows, or taskbar Close |
+| Choose memory and badge behavior | Right-click → **Settings** |
 
-The keyboard shortcut works when it is available on your system. Closing the
-window collapses it; **Quit FloatDot** stops the app.
+The global toggle shortcut works when it is available on your system. Clicking
+the top bar or pressing **Esc** collapses the window. An operating-system Close
+command and **Quit FloatDot** stop the entire app.
+
+### Memory settings
+
+Right-click the dot or top bar and open **Settings**. Both choices explain their
+tradeoff in the menu, and your selection is remembered:
+
+- **Memory saver — lower RAM; badges pause after 60 seconds** (default): after
+  one minute collapsed, an idle saved page unloads. The dot stays available;
+  opening it reloads the page with your local sign-in storage intact. Unread
+  detection pauses during sleep and does not count replies received while asleep.
+- **Live updates — higher RAM; keeps checking for replies**: keeps the page
+  running while collapsed for faster reopening and live unread detection.
+
+Sleep waits while a sign-in popup, detected draft, attachment, response in
+progress or audio is present. A page granted microphone/camera access remains
+awake until a full page navigation or reload. Detection depends on ChatGPT's page markup.
 
 ## Platforms
 
@@ -126,8 +147,10 @@ screens, and desktop-specific window rules can override that behavior.
 ### Does it notify me about every ChatGPT conversation?
 
 No. The badge observes detected assistant replies on the selected, loaded page
-while the dot is collapsed. Opening FloatDot clears the badge. It is not an
+while the dot is collapsed and ChatGPT is loaded. Opening FloatDot clears the badge. It is not an
 account-wide notification service, and it cannot detect replies while quit.
+In Memory saver mode it also cannot detect replies while asleep. Choose
+**Settings → Live updates** if background badges are more important than RAM.
 On a Dot page, ordinary chat replies, sidebar previews, and task-status changes
 outside the Dot reply text are ignored.
 
@@ -157,9 +180,11 @@ layout being recognized.
 
 ### Does it work offline, and does collapsing it save memory?
 
-ChatGPT needs an internet connection. Collapsing keeps the page alive so it can
-reopen without reloading and detect replies; it still uses memory. Choose
-**Quit FloatDot** to stop its background processes.
+ChatGPT needs an internet connection. Memory saver unloads an idle saved page
+after 60 seconds collapsed, which releases the page's renderer processes but
+leaves FloatDot's own window and browser infrastructure running. Live updates
+keeps the page alive and therefore uses more RAM. Choose **Quit FloatDot** to
+stop all of the app's background processes.
 
 ### Why might sign-in or a feature stop working?
 
@@ -167,6 +192,11 @@ ChatGPT's website and identity providers can change or restrict embedded
 browsers. FloatDot cannot bypass those restrictions or open app-only content
 that has no accessible web page. Try **Reload page** from the menu and report
 reproducible issues without including private chat content or credentials.
+
+Only ChatGPT and the supported sign-in providers can open inside the widget.
+Other HTTPS links open in your browser. Enterprise sign-in providers outside
+the allowlist may not work. Microphone and camera access require your approval;
+screen sharing and other sensitive browser permissions are currently disabled.
 
 ### Can I modify or share FloatDot? What about commercial use?
 

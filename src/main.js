@@ -1,8 +1,9 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, Menu, screen, shell, globalShortcut } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, Menu, screen, shell, globalShortcut, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { PHONE_CSS, AVATAR_BOUNDS } = require('./chatgpt-adapter');
+const { isChatGPT, isEmbeddedURL, httpsURL, guardNavigation, installPermissions } = require('./web-policy');
 
 app.setName('FloatDot');
 const APP_ID = 'io.github.m0hamedd.floatdot';
@@ -37,12 +38,9 @@ let phoneSize = { width: SIZE.width, height: SIZE.height };
 let reducedMotion = false;
 let motionSequence = 0;
 let lastPreview = null;
+let sleepTimer, sleeping = false, resumeUrl = null, mediaInUse = false, sleepRevision = 0;
+const SLEEP_AFTER_MS = 60_000;
 const popups = new Set();
-
-function isChatGPT(value) {
-  try { const u = new URL(value); return u.origin === 'https://chatgpt.com' && !u.username && !u.password; }
-  catch { return false; }
-}
 
 function pageKey(value) {
   try { const u = new URL(value); return u.origin + u.pathname.replace(/\/$/, '') + u.search; }
@@ -50,7 +48,7 @@ function pageKey(value) {
 }
 
 function isSelected() {
-  return !!preferences.dotUrl && pageKey(chat.webContents.getURL()) === pageKey(preferences.dotUrl);
+  return !!chat && !!preferences.dotUrl && pageKey(chat.webContents.getURL()) === pageKey(preferences.dotUrl);
 }
 
 function readPreferences() {
@@ -58,10 +56,11 @@ function readPreferences() {
     const saved = JSON.parse(fs.readFileSync(preferencesFile, 'utf8'));
     return {
       dotUrl: isChatGPT(saved.dotUrl) ? saved.dotUrl : null,
+      memorySaver: saved.memorySaver !== false,
       position: Number.isFinite(saved.position?.x) && Number.isFinite(saved.position?.y)
         ? { x: Math.round(saved.position.x), y: Math.round(saved.position.y) } : null,
     };
-  } catch { return { dotUrl: null, position: null }; }
+  } catch { return { dotUrl: null, position: null, memorySaver: true }; }
 }
 
 function savePreferences() {
@@ -93,20 +92,21 @@ function fitBounds(position, width, height) {
 function barHeight() { return SIZE.bar + (preferences.dotUrl ? 0 : SIZE.setup); }
 
 function state() {
-  return { expanded, unread, saved: !!preferences.dotUrl, selected: isSelected(), status, avatar,
+  return { expanded, unread, saved: !!preferences.dotUrl, selected: isSelected(), status, avatar, sleeping, memorySaver: preferences.memorySaver,
     motion: transition ? (expanded ? 'opening' : 'closing') : null, phoneSize, barHeight: barHeight() };
 }
 
 async function refreshAppearance() {
-  if (quitting || transition || !expanded || capturingAvatar || !isSelected()) return;
+  if (quitting || !chat || transition || !expanded || capturingAvatar || !isSelected()) return;
   capturingAvatar = true;
-  const url = chat.webContents.getURL();
+  const contents = chat.webContents;
+  const url = contents.getURL();
   try {
-    const rect = await chat.webContents.executeJavaScript(AVATAR_BOUNDS);
+    const rect = await contents.executeJavaScript(AVATAR_BOUNDS);
     if (!rect || !['x', 'y', 'width', 'height'].every(key => Number.isInteger(rect[key]))) return;
     if (rect.width < 24 || rect.width > 160 || rect.height < 24 || rect.height > 160) return;
-    const picture = await chat.webContents.capturePage(rect);
-    if (isSelected() && chat.webContents.getURL() === url && !picture.isEmpty()) {
+    const picture = await contents.capturePage(rect);
+    if (chat?.webContents === contents && isSelected() && contents.getURL() === url && !picture.isEmpty()) {
       avatar = picture.resize({ width: 40, height: 40 }).toDataURL();
       broadcast();
     }
@@ -154,22 +154,29 @@ function layout() {
 }
 
 async function capturePreview() {
+  if (!chat) return null;
   let deadline;
-  const url = chat.webContents.getURL();
+  const contents = chat.webContents;
+  const url = contents.getURL();
   try {
     const picture = await Promise.race([
-      chat.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true }),
+      contents.capturePage(undefined, { stayHidden: true, stayAwake: true }),
       new Promise(resolve => { deadline = setTimeout(() => resolve(null), 120); }),
     ]);
-    if (picture && !picture.isEmpty() && chat.webContents.getURL() === url) lastPreview = picture.toDataURL();
+    if (picture && !picture.isEmpty() && chat?.webContents === contents && contents.getURL() === url) lastPreview = picture.toDataURL();
   } catch { /* A loading page can use the last painted preview. */ }
   finally { clearTimeout(deadline); }
   return lastPreview;
 }
 
 function setExpanded(value) {
+  if (quitting) return Promise.resolve();
+  sleepRevision++;
+  clearTimeout(sleepTimer);
+  if (value && !chat) wakeChat();
   if (value === expanded) {
     if (value) { unread = 0; broadcast(); if (!transition) chat.webContents.focus(); }
+    if (!value && !transition) scheduleSleep();
     return transition?.done || Promise.resolve();
   }
   // The dot's anchor is independent of the phone's clamped/dragged position.
@@ -179,7 +186,7 @@ function setExpanded(value) {
     savePreferences();
   }
   expanded = value;
-  chat.webContents.send('dot:visibility', expanded);
+  chat?.webContents.send('dot:visibility', expanded);
   if (expanded) unread = 0;
   // Reverse the renderer's existing timeline instead of restarting it.
   if (transition) {
@@ -219,6 +226,7 @@ function setExpanded(value) {
     revealSurface();
     if (expanded) { chat.webContents.focus(); scheduleAppearance(); }
     else win.webContents.focus();
+    if (!expanded) scheduleSleep();
     resolve();
   };
   current.finish = finish;
@@ -241,26 +249,90 @@ function setExpanded(value) {
 }
 
 async function configureAdapter() {
-  if (chat.webContents.isDestroyed()) return;
+  if (!chat || chat.webContents.isDestroyed()) return;
+  const contents = chat.webContents;
   const enabled = isSelected() && isChatGPT(chat.webContents.getURL());
-  chat.webContents.send('dot:configure-observer', { enabled, expanded });
+  contents.send('dot:configure-observer', { enabled, expanded });
   if (enabled && expanded) scheduleAppearance();
   try {
-    if (cssKey) { await chat.webContents.removeInsertedCSS(cssKey); cssKey = null; }
-    if (enabled) cssKey = await chat.webContents.insertCSS(PHONE_CSS);
+    if (cssKey) { await contents.removeInsertedCSS(cssKey); cssKey = null; }
+    if (enabled && chat?.webContents === contents) cssKey = await contents.insertCSS(PHONE_CSS);
   } catch (error) { console.warn('ChatGPT layout could not be applied:', error.message); }
   broadcast();
 }
 
 function navigate(url) {
+  if (!chat) createChat();
+  sleeping = false;
+  resumeUrl = url;
+  const contents = chat.webContents;
   lastPreview = null;
   status = 'Loading ChatGPT…';
   broadcast();
-  chat.webContents.loadURL(url).catch((error) => {
-    if (error.code === 'ERR_ABORTED') return;
+  contents.loadURL(url).catch((error) => {
+    if (error.code === 'ERR_ABORTED' || chat?.webContents !== contents) return;
     status = 'ChatGPT could not load. Right-click the dot or title bar to retry.';
     broadcast();
   });
+}
+
+function scheduleSleep() {
+  const revision = ++sleepRevision;
+  clearTimeout(sleepTimer);
+  if (quitting || expanded || transition || !preferences.memorySaver || !chat) return;
+  sleepTimer = setTimeout(async () => {
+    if (!await sleepChat() && revision === sleepRevision) scheduleSleep();
+  }, SLEEP_AFTER_MS);
+}
+
+async function sleepChat() {
+  const view = chat;
+  const revision = sleepRevision;
+  const eligible = () => !quitting && view && chat === view && !expanded && !transition
+    && revision === sleepRevision
+    && preferences.memorySaver && !mediaInUse && popups.size === 0 && isSelected()
+    && !view.webContents.isDestroyed() && !view.webContents.isLoading()
+    && !view.webContents.isCurrentlyAudible();
+  if (!eligible()) return false;
+  const url = view.webContents.getURL();
+  try {
+    // Do not unload drafts, file attachments or a response that is still
+    // generating. Unknown/loading pages stay alive; sleep is best effort.
+    const busy = await view.webContents.executeJavaScript(`(() => {
+      if (document.readyState !== 'complete' || !document.querySelector('main')) return true;
+      if (document.querySelector('[data-testid="stop-button"], button[aria-label="Stop streaming"], button[aria-label="Stop generating"], [data-testid="attachment-preview"]')) return true;
+      return [...document.querySelectorAll('textarea, [contenteditable="true"], input[type="file"]')]
+        .some(el => el.files?.length || (el.value || el.textContent || '').trim());
+    })()`);
+    if (busy || !eligible() || view.webContents.getURL() !== url) return false;
+  } catch { return false; }
+  clearTimeout(sleepTimer);
+  resumeUrl = url;
+  if (chatAttached) win.contentView.removeChildView(view);
+  chatAttached = false;
+  chat = null;
+  sleeping = true;
+  cssKey = null;
+  lastPreview = null;
+  status = 'Sleeping to save memory · Unread detection paused';
+  view.webContents.close();
+  broadcast();
+  return true;
+}
+
+function wakeChat() {
+  if (chat) return;
+  navigate(resumeUrl || preferences.dotUrl || HOME);
+  layout();
+}
+
+function setMemorySaver(enabled) {
+  sleepRevision++;
+  preferences.memorySaver = enabled === true;
+  savePreferences();
+  if (!preferences.memorySaver) { clearTimeout(sleepTimer); wakeChat(); }
+  else scheduleSleep();
+  broadcast();
 }
 
 function showMenu() {
@@ -268,32 +340,36 @@ function showMenu() {
     { label: expanded ? 'Collapse to dot' : 'Open FloatDot', click: () => setExpanded(!expanded) },
     { label: 'Go to my Dot', enabled: !!preferences.dotUrl, click: () => { navigate(preferences.dotUrl); setExpanded(true); } },
     { label: 'ChatGPT home / choose another conversation', click: () => { navigate(HOME); setExpanded(true); } },
-    { label: 'Set current page as my Dot', visible: !!preferences.dotUrl, enabled: !isSelected(), click: saveCurrent },
-    { label: 'Back', enabled: chat.webContents.navigationHistory.canGoBack(), click: () => chat.webContents.navigationHistory.goBack() },
-    { label: 'Reload page', click: () => chat.webContents.reload() },
+    { label: 'Set current page as my Dot', visible: !!preferences.dotUrl, enabled: !!chat && !isSelected(), click: saveCurrent },
+    { label: 'Back', enabled: !!chat && chat.webContents.navigationHistory.canGoBack(), click: () => chat?.webContents.navigationHistory.goBack() },
+    { label: 'Reload page', click: () => { if (chat) chat.webContents.reload(); else wakeChat(); scheduleSleep(); } },
     { type: 'separator' },
-    { label: 'Quit FloatDot', click: () => app.quit() },
+    { label: 'Settings', submenu: [
+      { label: 'Memory saver — lower RAM; badges pause after 60 seconds', type: 'radio', checked: preferences.memorySaver, click: () => setMemorySaver(true) },
+      { label: 'Live updates — higher RAM; keeps checking for replies', type: 'radio', checked: !preferences.memorySaver, click: () => setMemorySaver(false) },
+    ] },
+    { label: sleeping ? 'Sleeping — click the dot to reload' : 'ChatGPT is loaded', enabled: false },
+    { type: 'separator' },
+    { label: 'Quit FloatDot', accelerator: 'CommandOrControl+Q', click: () => app.quit() },
   ]).popup({ window: win });
 }
 
 function installWebGuards(contents) {
   contents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key.toLowerCase() === 'q' && (process.platform === 'darwin' ? input.meta : input.control)) {
+      event.preventDefault();
+      app.quit();
+      return;
+    }
     if (input.type === 'keyDown' && input.key === 'Escape') {
       event.preventDefault();
       setExpanded(false);
     }
   });
-  // Permit ordinary HTTPS login redirects, but never load privileged local URLs.
-  contents.on('will-navigate', (event, url) => { if (!url.startsWith('https://')) event.preventDefault(); });
-  contents.on('will-redirect', (event, url) => { if (!url.startsWith('https://')) event.preventDefault(); });
+  guardNavigation(contents, url => shell.openExternal(url));
   contents.setWindowOpenHandler(({ url }) => {
-    let hostname;
-    try { const target = new URL(url); if (target.protocol !== 'https:') return { action: 'deny' }; hostname = target.hostname; }
-    catch { return { action: 'deny' }; }
-    const loginHost = hostname === 'chatgpt.com' || hostname.endsWith('.chatgpt.com')
-      || hostname === 'openai.com' || hostname.endsWith('.openai.com')
-      || ['accounts.google.com', 'appleid.apple.com', 'account.apple.com', 'login.live.com', 'login.microsoftonline.com'].includes(hostname);
-    if (!loginHost) { shell.openExternal(url).catch(console.error); return { action: 'deny' }; }
+    if (!httpsURL(url)) return { action: 'deny' };
+    if (!isEmbeddedURL(url)) { shell.openExternal(url).catch(() => {}); return { action: 'deny' }; }
     return {
       action: 'allow',
       overrideBrowserWindowOptions: {
@@ -330,6 +406,7 @@ function endDrag(cancel = false) {
 }
 
 function saveCurrent() {
+  if (!chat) return false;
   const url = chat.webContents.getURL();
   if (!isChatGPT(url) || /^\/auth(?:\/|$)/.test(new URL(url).pathname)) {
     status = 'Open your conversation on chatgpt.com first.';
@@ -378,12 +455,64 @@ function registerIPC() {
   });
   ipcMain.on('dot:drag-end', (event, cancel) => { if (fromUI(event)) endDrag(cancel === true); });
   ipcMain.on('dot:assistant-added', (event, data) => {
-    if (event.sender !== chat.webContents || event.senderFrame !== chat.webContents.mainFrame) return;
+    if (!chat || event.sender !== chat.webContents || event.senderFrame !== chat.webContents.mainFrame) return;
     if (!isChatGPT(event.senderFrame.url) || !isSelected() || pageKey(data?.url) !== pageKey(preferences.dotUrl)) return;
     if (expanded || !Number.isInteger(data?.count) || data.count < 1 || data.count > 20) return;
     unread = Math.min(999, unread + data.count);
     broadcast();
   });
+}
+
+function createChat() {
+  const view = new WebContentsView({
+    webPreferences: {
+      partition: PARTITION, preload: path.join(__dirname, 'chatgpt-adapter.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false,
+    },
+  });
+  chat = view;
+  mediaInUse = false;
+  const contents = view.webContents;
+  installPermissions(contents, {
+    canPrompt: () => !quitting && !win.isDestroyed() && expanded && win.isVisible(),
+    onMediaAllowed: () => { if (chat === view) mediaInUse = true; },
+    askMedia: async types => {
+      const devices = types.map(type => type === 'audio' ? 'microphone' : 'camera').join(' and ');
+      const result = await dialog.showMessageBox(win, {
+        type: 'question', title: 'FloatDot permission',
+        message: `Allow chatgpt.com to use your ${devices}?`,
+        detail: 'Only allow this if you started a voice or camera feature. This choice lasts until the page navigates or FloatDot quits.',
+        buttons: ['Deny', 'Allow'], defaultId: 0, cancelId: 0, noLink: true,
+      });
+      return result.response === 1;
+    },
+  });
+  view.setBackgroundColor('#ffffff');
+  view.setBounds({ x: 0, y: barHeight(), width: SIZE.width, height: SIZE.height - barHeight() });
+  view.setVisible(false);
+  installWebGuards(contents);
+  contents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => {
+    if (chat === view && isMainFrame) { sleepRevision++; clearTimeout(sleepTimer); }
+  });
+  // Same-document route changes can leave a microphone stream running. Only
+  // a committed replacement document ends that conservative sleep exemption.
+  contents.on('did-navigate', () => { if (chat === view) mediaInUse = false; });
+  contents.on('dom-ready', () => {
+    if (chat !== view) return;
+    cssKey = null; lastPreview = null; void configureAdapter();
+  });
+  contents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
+    if (chat === view && isMainFrame) { status = ''; void configureAdapter(); scheduleSleep(); }
+  });
+  contents.on('did-finish-load', () => {
+    if (chat !== view) return;
+    status = ''; broadcast(); scheduleAppearance(); scheduleSleep();
+  });
+  contents.on('render-process-gone', () => {
+    if (chat !== view || quitting) return;
+    status = 'ChatGPT stopped. Right-click the dot or title bar to reload.'; broadcast();
+  });
+  return view;
 }
 
 async function createWindow() {
@@ -430,28 +559,16 @@ async function createWindow() {
   }
   win.on('show', keepOnTop);
   win.on('focus', keepOnTop);
-  chat = new WebContentsView({
-    webPreferences: {
-      partition: PARTITION, preload: path.join(__dirname, 'chatgpt-adapter.js'),
-      contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false,
-    },
-  });
-  chat.setBackgroundColor('#ffffff');
-  chat.setBounds({ x: 0, y: barHeight(), width: SIZE.width, height: SIZE.height - barHeight() });
-  chat.setVisible(false);
+  createChat();
   registerIPC();
-  installWebGuards(chat.webContents);
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key.toLowerCase() === 'q' && (process.platform === 'darwin' ? input.meta : input.control)) {
+      event.preventDefault(); app.quit(); return;
+    }
     if (input.type === 'keyDown' && input.key === 'Escape') { event.preventDefault(); setExpanded(false); }
   });
-  chat.webContents.on('dom-ready', () => { cssKey = null; lastPreview = null; void configureAdapter(); });
-  chat.webContents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
-    if (isMainFrame) { status = ''; void configureAdapter(); }
-  });
-  chat.webContents.on('did-finish-load', () => { status = ''; broadcast(); scheduleAppearance(); });
-  chat.webContents.on('render-process-gone', () => { status = 'ChatGPT stopped. Right-click the dot or title bar to reload.'; broadcast(); });
   win.on('resize', layout);
   win.on('move', () => {
     if (expanded || transition) return;
@@ -461,10 +578,13 @@ async function createWindow() {
     saveTimer = setTimeout(savePreferences, 250);
   });
   win.on('blur', () => { endDrag(true); keepOnTop(); });
-  win.on('close', (event) => { if (!quitting) { event.preventDefault(); setExpanded(false); } });
+  // The collapse bar and Escape keep the dot alive. An operating-system Close
+  // command (including Alt+F4 / taskbar Close) means quit the entire app.
+  win.on('close', (event) => { if (!quitting) { event.preventDefault(); app.quit(); } });
   win.on('closed', () => {
     for (const popup of popups) if (!popup.isDestroyed()) popup.destroy();
-    if (!chat.webContents.isDestroyed()) chat.webContents.close();
+    if (chat && !chat.webContents.isDestroyed()) chat.webContents.close();
+    chat = null;
   });
   screen.on('display-removed', () => {
     if (transition) {
@@ -484,6 +604,7 @@ async function createWindow() {
   // Windows may finish applying transparent-window styles after the first show.
   setTimeout(keepOnTop, 500);
   navigate(preferences.dotUrl || HOME);
+  scheduleSleep();
   globalShortcut.register('CommandOrControl+Shift+D', () => { win.show(); setExpanded(!expanded); });
 }
 
@@ -494,7 +615,7 @@ else {
   app.on('second-instance', () => { if (win) { win.show(); setExpanded(true); } });
   app.whenReady().then(createWindow).then(async () => {
     if (!app.isPackaged && process.env.DOT_SMOKE_PROFILE && process.env.DOT_SMOKE_RUNNER) {
-      await require(process.env.DOT_SMOKE_RUNNER)({ app, win, chat, setExpanded, state, preferences, savePreferences, fitBounds, configureAdapter });
+      await require(process.env.DOT_SMOKE_RUNNER)({ app, win, chat, getChat: () => chat, setExpanded, state, preferences, savePreferences, fitBounds, configureAdapter, sleepChat, setMemorySaver });
     }
   }).catch((error) => { console.error(error); app.exit(1); });
 }
@@ -502,6 +623,8 @@ app.on('activate', () => { if (win && !win.isDestroyed()) { win.show(); setExpan
 app.on('before-quit', () => {
   quitting = true;
   clearInterval(dragTimer);
+  sleepRevision++;
+  clearTimeout(sleepTimer);
   if (transition) { clearTimeout(transition.timer); transition.resolve(); }
   if (preferences) savePreferences();
   globalShortcut.unregisterAll();

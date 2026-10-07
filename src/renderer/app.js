@@ -120,9 +120,10 @@ function render(state) {
   badge.hidden = state.unread === 0;
   badge.textContent = state.unread > 99 ? '99+' : String(state.unread);
   dotButton.setAttribute('aria-label', state.unread ? `Open FloatDot, ${state.unread} unread` : 'Open FloatDot');
+  dotButton.title = [state.sleeping ? 'Sleeping — click to reload · Unread detection paused' : 'Click to open · Drag to move', 'Right-click for Settings or Quit'].join('\n');
   statusText.textContent = state.status || (state.selected ? 'My Dot' : '');
   statusText.title = state.status || '';
-  titlebar.title = [state.status, 'Click to collapse · Drag to move · Right-click for menu'].filter(Boolean).join('\n');
+  titlebar.title = [state.status, 'Click to collapse · Drag to move · Right-click to quit or change settings'].filter(Boolean).join('\n');
   matchAppearance(state.avatar);
 }
 window.dot.onState(render);

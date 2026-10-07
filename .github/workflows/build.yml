@@ -38,7 +38,27 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Check security policy
+        if: runner.os != 'Windows'
+        run: node scripts/security.cjs
+      - name: Check Windows behavior with owned-process cleanup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/smoke.ps1 -Security
+          ./scripts/smoke.ps1
+          ./scripts/smoke.ps1 -Restart
+          ./scripts/smoke.ps1 -Regression
+          ./scripts/smoke.ps1 -Memory
       - run: ${{ matrix.command }}
+      - name: Verify Windows package contents
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/smoke.ps1 -VerifyPackage
+      - name: Write download checksums
+        shell: bash
+        run: |
+          node -e 'const fs=require("node:fs"),c=require("node:crypto"); const files=fs.readdirSync("dist").filter(f=>/^floatdot-.*\.(exe|dmg|zip|AppImage)$/.test(f)).sort(); if(!files.length)throw Error("No downloads"); fs.writeFileSync("dist/SHA256SUMS.txt",files.map(f=>c.createHash("sha256").update(fs.readFileSync("dist/"+f)).digest("hex")+"  "+f).join("\n")+"\n");'
       - uses: actions/upload-artifact@v7
         with:
           name: floatdot-${{ matrix.platform }}
@@ -49,5 +69,6 @@ jobs:
             dist/*.dmg
             dist/*.zip
             dist/*.AppImage
+            dist/SHA256SUMS.txt
 # Builds downloadable artifacts for review. This workflow does not publish
 # a release or claim that a build has passed a real desktop acceptance test.

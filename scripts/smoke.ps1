@@ -1,12 +1,14 @@
-param([switch]$Restart, [switch]$Interactive, [switch]$Quick, [switch]$Regression, [switch]$Package, [switch]$VerifyPackage, [switch]$Icons)
+param([switch]$Restart, [switch]$Interactive, [switch]$Quick, [switch]$Regression, [switch]$Package, [switch]$VerifyPackage, [switch]$Icons, [switch]$Security, [switch]$Memory, [string]$BuildDirectory = 'dist')
 $ErrorActionPreference = 'Stop'
 $scriptDirectory = if ($PSScriptRoot) { $PSScriptRoot } else { Join-Path (Get-Location).Path 'scripts' }
 $project = Split-Path -Parent $scriptDirectory
+$buildPath = [IO.Path]::GetFullPath((Join-Path $project $BuildDirectory))
+if (-not $buildPath.StartsWith(($project.TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Build output must stay inside this project' }
 $output = Join-Path $project '.smoke'
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 # Assign the suspended root to an owned Job Object before any Electron child can
 # start. Closing this handle (including cancellation) kills only this test tree.
-Add-Type -TypeDefinition @'
+if (-not ('DotTestJob' -as [type])) { Add-Type -TypeDefinition @'
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
@@ -45,31 +47,36 @@ public sealed class DotTestJob : IDisposable {
   public void Dispose() { if(job!=IntPtr.Zero) { TerminateJobObject(job,1); CloseHandle(job); job=IntPtr.Zero; } if(child.process!=IntPtr.Zero) { CloseHandle(child.process); child.process=IntPtr.Zero; } }
 }
 '@
-$env:DOT_SMOKE_PROFILE = Join-Path $output $(if ($Regression) { 'regression-profile' } else { 'profile' })
-$env:DOT_SMOKE_RUNNER = Join-Path $scriptDirectory $(if ($Regression) { 'regression.cjs' } else { 'smoke.cjs' })
+}
+$env:DOT_SMOKE_PROFILE = Join-Path $output $(if ($Memory) { 'memory-profile' } elseif ($Regression) { 'regression-profile' } else { 'profile' })
+$env:DOT_SMOKE_RUNNER = Join-Path $scriptDirectory $(if ($Memory) { 'memory.cjs' } elseif ($Regression) { 'regression.cjs' } else { 'smoke.cjs' })
 $env:DOT_SMOKE_RESTART = if ($Restart) { '1' } else { '' }
 $env:DOT_SMOKE_INTERACTIVE = if ($Interactive) { '1' } else { '' }
 $env:DOT_SMOKE_QUICK = if ($Quick) { '1' } else { '' }
 Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 $ownedJob = $null
 try {
-  if ($Icons) {
+  if ($Security) {
+    $nodePath = (Get-Command node.exe).Source
+    $securityPath = Join-Path $project 'scripts\security.cjs'
+    $ownedJob = [DotTestJob]::new($nodePath, ('"' + $securityPath + '"'), $project)
+  } elseif ($Icons) {
     $iconScript = Join-Path $project 'scripts\build-icons.cjs'
     $ownedJob = [DotTestJob]::new((Join-Path $project 'node_modules\electron\dist\electron.exe'), ('"' + $iconScript + '"'), $project)
   } elseif ($VerifyPackage) {
     $nodePath = (Get-Command node.exe).Source
     $verifyPath = Join-Path $project 'scripts\verify-package.cjs'
-    $ownedJob = [DotTestJob]::new($nodePath, ('"' + $verifyPath + '"'), $project)
+    $ownedJob = [DotTestJob]::new($nodePath, ('"' + $verifyPath + '" "' + $buildPath + '"'), $project)
   } elseif ($Package) {
     $nodePath = (Get-Command node.exe).Source
     $builderPath = Join-Path $project 'node_modules\electron-builder\cli.js'
-    $ownedJob = [DotTestJob]::new($nodePath, ('"' + $builderPath + '" --win --x64 --publish never'), $project)
+    $ownedJob = [DotTestJob]::new($nodePath, ('"' + $builderPath + '" --win --x64 --publish never --config.directories.output="' + $buildPath + '"'), $project)
   } else {
     $ownedJob = [DotTestJob]::new((Join-Path $project 'node_modules\electron\dist\electron.exe'), '.', $project)
   }
   $identity = Get-Process -Id $ownedJob.Pid
   @{ pid=$ownedJob.Pid; created=$identity.StartTime.ToUniversalTime().ToString('o'); profile=$env:DOT_SMOKE_PROFILE } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'process.json')
-  $deadline = [DateTime]::UtcNow.AddSeconds($(if ($Package) { 900 } elseif ($Interactive) { 260 } else { 80 }))
+  $deadline = [DateTime]::UtcNow.AddSeconds($(if ($Package) { 900 } elseif ($Interactive) { 260 } elseif ($Memory) { 110 } else { 80 }))
   while (-not $ownedJob.Wait(500)) { if ([DateTime]::UtcNow -gt $deadline) { throw 'Smoke run timed out' } }
   Write-Output "Owned process exit: $($ownedJob.ExitCode)"
   if ($ownedJob.ExitCode -ne 0) { throw "Owned build/test failed; review the output and .smoke failure evidence" }

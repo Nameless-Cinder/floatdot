@@ -7,7 +7,8 @@ policies. FloatDot does not make the website private or offline.
 
 ## What stays on your computer
 
-- `dot-preferences.json` contains the selected page URL and floating dot position.
+- `dot-preferences.json` contains the selected page URL, floating dot position,
+  and selected memory mode.
 - The `persist:chatgpt-dot` browser partition stores the website's normal cookies,
   session, cache, and local storage.
 - The local page observer examines page structure and message elements to detect
@@ -15,6 +16,9 @@ policies. FloatDot does not make the website private or offline.
   main process locally, not to a FloatDot server.
 - Temporary page images used for animation and avatar samples stay in memory.
   FloatDot does not deliberately save those images as screenshot files.
+- Memory saver checks for draft/attachment/response indicators before unloading
+  the page. These checks return only whether the page is busy; they do not copy
+  draft content to preferences or send it to a separate service.
 
 The profile directory retains the original **ChatGPT Dot** name so existing
 users keep their sign-in, selected page, and position after the FloatDot rename:
@@ -28,6 +32,20 @@ users keep their sign-in, selected page, and position after the FloatDot rename:
 Each operating-system user has separate data. People sharing one OS login share
 this browser profile. Anyone with access to that profile may be able to access
 its session data; do not commit or share the profile directory.
+
+## Website permissions and links
+
+Microphone and camera access require an explicit FloatDot consent dialog from
+the visible ChatGPT page, in addition to any operating-system permission.
+Approval is remembered in memory until navigation or quitting. Other browser
+capabilities, including desktop notifications, clipboard reading, location,
+screen capture and hardware access, are denied. Copying text to the clipboard
+is allowed on the main ChatGPT page. The unread badge does not require browser
+notification permission.
+
+Only ChatGPT and a fixed set of sign-in origins can replace the embedded page.
+Other HTTPS links open in your default browser; redirects to unlisted origins
+are blocked. Some enterprise sign-in providers may therefore be unsupported.
 
 ## Sign out or reset
 

@@ -8,11 +8,12 @@ const crypto = require('node:crypto');
 (async () => {
   const asar = await import('@electron/asar');
   const root = path.resolve(__dirname, '..');
-  const archive = path.join(root, 'dist', 'win-unpacked', 'resources', 'app.asar');
+  const distribution = path.resolve(root, process.argv[2] || 'dist');
+  const archive = path.join(distribution, 'win-unpacked', 'resources', 'app.asar');
   const archivePath = file => file.split('/').join(path.sep);
   const expected = [
     'LICENSE.md', 'NOTICE.md', 'package.json', 'src/main.js',
-    'src/chatgpt-adapter.js', 'src/preload.js', 'src/renderer/app.js',
+    'src/chatgpt-adapter.js', 'src/preload.js', 'src/web-policy.js', 'src/renderer/app.js',
     'src/renderer/index.html', 'src/renderer/style.css',
   ].sort();
   const files = asar.listPackage(archive, { isPack: false })
@@ -29,14 +30,17 @@ const crypto = require('node:crypto');
   assert.equal(metadata.main, 'src/main.js');
   assert.ok(!metadata.dependencies || Object.keys(metadata.dependencies).length === 0);
   for (const icon of ['icon.png', 'icon.ico']) {
-    assert.ok(fs.readFileSync(path.join(root, 'dist', 'win-unpacked', 'resources', 'icons', icon))
+    assert.ok(fs.readFileSync(path.join(distribution, 'win-unpacked', 'resources', 'icons', icon))
       .equals(fs.readFileSync(path.join(root, 'assets', icon))), `Packaged ${icon} differs from the source`);
   }
-  assert.ok(fs.existsSync(path.join(root, 'dist', 'win-unpacked', 'FloatDot.exe')), 'The Windows executable must be named FloatDot');
+  assert.ok(fs.existsSync(path.join(distribution, 'win-unpacked', 'FloatDot.exe')), 'The Windows executable must be named FloatDot');
+  for (const notice of ['LICENSE.electron.txt', 'LICENSES.chromium.html']) {
+    assert.ok(fs.statSync(path.join(distribution, 'win-unpacked', notice)).size > 0, `Missing third-party notice: ${notice}`);
+  }
   const installer = `floatdot-${metadata.version}-win-x64.exe`;
   const hash = crypto.createHash('sha256');
-  for await (const chunk of fs.createReadStream(path.join(root, 'dist', installer))) hash.update(chunk);
-  const result = { passed: true, files, installer, sha256: hash.digest('hex') };
+  for await (const chunk of fs.createReadStream(path.join(distribution, installer))) hash.update(chunk);
+  const result = { passed: true, files, installer, directory: path.relative(root, distribution), sha256: hash.digest('hex') };
   fs.writeFileSync(path.join(root, '.smoke', 'package-audit.json'), JSON.stringify(result, null, 2));
   console.log(`Package verified: ${files.length} app/license files; no profiles, screenshots, test runners or development dependencies.`);
 })().catch(error => {

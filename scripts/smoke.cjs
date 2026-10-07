@@ -77,6 +77,12 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences, saveP
       await win.webContents.executeJavaScript('window.dot.saveCurrent()');
       assert.equal(preferences.dotUrl, 'https://chatgpt.com/c/dot-smoke');
       assert.deepEqual(await runJS('[typeof require, typeof window.dot]'), ['undefined', 'undefined']);
+      assert.equal(await runJS('Notification.requestPermission()'), 'denied');
+      assert.equal(await runJS('navigator.permissions.query({name: "geolocation"}).then(p => p.state)'), 'denied');
+      await runJS('location.href = "file:///C:/Windows/win.ini"');
+      await sleep(200);
+      assert.equal(chat.webContents.getURL(), 'https://chatgpt.com/c/dot-smoke');
+      report('Remote notifications/location denied and local-file navigation blocked by the live session');
       await runJS('window.liveSentinel = 123; localStorage.setItem("dot-smoke-persistence", "persisted")');
       await sleep(2300);
       await setExpanded(false);
@@ -121,7 +127,7 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences, saveP
       assert.ok(bounds.x >= area.x && bounds.y >= area.y && bounds.x + bounds.width <= area.x + area.width && bounds.y + bounds.height <= area.y + area.height);
       report('Expansion at monitor edge stays inside work area');
 
-      // Exercise navigation reset and documented fallback independently.
+      // Unknown markup must fail quietly instead of guessing from page text.
       await chat.webContents.loadURL('https://chatgpt.com/c/other');
       await runJS('document.querySelector("main").innerHTML = "<article data-testid=conversation-turn-0>" + "x".repeat(90) + "</article>"');
       await win.webContents.executeJavaScript('window.dot.saveCurrent()');
@@ -129,8 +135,8 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences, saveP
       await setExpanded(false);
       await runJS('document.querySelector("main").insertAdjacentHTML("beforeend", "<article data-testid=conversation-turn-1>" + "y".repeat(90) + "</article>")');
       await sleep(350);
-      assert.equal(state().unread, 1);
-      report('Route change resets observer; substantial-turn heuristic works');
+      assert.equal(state().unread, 0);
+      report('Route change resets observer; unrecognized generic turns cannot create unread counts');
 
       preferences.dotUrl = 'https://chatgpt.com/c/dot-smoke';
       win.setPosition(140, 140);
@@ -149,7 +155,7 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences, saveP
     }
     fs.writeFileSync(path.join(directory, process.env.DOT_SMOKE_RESTART ? 'restart-result.json' : 'result.json'), JSON.stringify({ passed: true, checks }, null, 2));
   } catch (error) {
-    fs.writeFileSync(path.join(directory, 'failure.json'), JSON.stringify({ passed: false, checks, error: error.stack }, null, 2));
+    fs.writeFileSync(path.join(directory, `smoke-failure-${Date.now()}.json`), JSON.stringify({ passed: false, checks, error: error.stack }, null, 2));
     failed = true;
   } finally {
     if (failed) app.exit(1);
