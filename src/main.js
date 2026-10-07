@@ -370,7 +370,7 @@ function setMemorySaver(enabled) {
 function createMenu() {
   return Menu.buildFromTemplate([
     { label: expanded ? 'Collapse to dot' : 'Open FloatDot', click: () => { if (expanded) setExpanded(false); else showFloatDot(); } },
-    { label: 'Go to my Dot', enabled: !!preferences.dotUrl, click: () => { navigate(preferences.dotUrl); setExpanded(true); } },
+    { label: 'Back to my Dot', visible: !!preferences.dotUrl && pageKey(chat ? chat.webContents.getURL() : resumeUrl || preferences.dotUrl) !== pageKey(preferences.dotUrl), click: () => { navigate(preferences.dotUrl); setExpanded(true); } },
     { label: 'ChatGPT home / choose another conversation', click: () => { navigate(HOME); setExpanded(true); } },
     { label: 'Set current page as my Dot', visible: !!preferences.dotUrl, enabled: !!chat && !isSelected(), click: saveCurrent },
     { label: 'Back', enabled: !!chat && chat.webContents.navigationHistory.canGoBack(), click: () => chat?.webContents.navigationHistory.goBack() },
