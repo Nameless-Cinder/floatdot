@@ -114,6 +114,11 @@ saved preferences and browser storage. The build workflow runs security checks
 on every platform and the smoke, restart and regression suites on Windows.
 The Windows workflow also runs the memory lifecycle suite. See the
 [release review](RELEASE-AUDIT.md) for the latest local results and unverified areas.
+
+`-Tray` checks Windows tray creation, opening a
+minimized window, current Settings and clean quit. Windows uses the existing
+ICO in its tray, while keeping the floating dot visible. The tray is destroyed
+on quit; if tray creation fails, the regular taskbar button is restored.
 Results and preserved failures stay in `.smoke/`. Never use a real account in
 tests. Verify owned test processes have exited before retrying or finishing.
 

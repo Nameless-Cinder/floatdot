@@ -50,6 +50,7 @@ jobs:
           ./scripts/smoke.ps1 -Restart
           ./scripts/smoke.ps1 -Regression
           ./scripts/smoke.ps1 -Memory
+          ./scripts/smoke.ps1 -Tray
       - run: ${{ matrix.command }}
       - name: Verify Windows package contents
         if: runner.os == 'Windows'

@@ -32,6 +32,9 @@ Nothing was published or made public during this review.
   It now checks that unknown content fails quietly.
 - System Close used to collapse the app, leaving its processes running. It now
   quits. The top bar and Escape still collapse; Ctrl+Q / Command+Q also quit.
+- Windows now keeps a tray icon alongside the visible floating dot, using
+  Electron's `skipTaskbar` option to omit a normal taskbar button. Tray click
+  opens/restores the app; its menu shares Settings and Quit with the dot.
 - A collapsed page retained its full browser memory. Settings now offers
   Memory saver (default, unload after 60 seconds; unread detection pauses) and
   Live updates (higher memory use; keep checking for replies). Mode changes
@@ -52,6 +55,7 @@ was not used for tests.
 | Restart | Saved URL/position and synthetic browser storage restored |
 | Regression | 13 checks passed for animation/reversal, anchor, unread scope and streaming |
 | Memory lifecycle | 7 checks passed: real 60-second timer, draft/response guards, both saved modes, stale-probe races, renderer process exit, storage/cookies retained on wake, and system Close quitting |
+| Windows tray | 5 checks passed: live tray object with visible dot, click/double-click handling, restoring a minimized window, current Settings, and Quit destroying the tray. Native input events were simulated; taskbar exclusion uses the documented Electron API |
 | Windows packaging | Installer built; 10 app/license files matched the reviewed source; icons, executable identity and Electron/Chromium notices present; no profiles, screenshots, test runners or development dependencies in the app archive |
 | Repository history | Reachable file history contained application/docs/assets only; scoped token/private-key/private-conversation-URL pattern scan found no matches |
 | Build workflow | YAML parsed; security, Windows behavior, package verification and checksum steps added. Workflow execution itself was not validated here |
@@ -82,14 +86,14 @@ results, not a measurement or guarantee for a signed-in ChatGPT account.
 
 ## Reviewed Windows artifact
 
-Local output: `dist/memory-update/floatdot-0.1.0-win-x64.exe`.
-Older artifacts in `dist/` predate this review; use the files in `memory-update`
-and its current checksums when preparing downloads.
+Local output: `dist/floatdot-0.1.0-win-x64.exe` (includes the Windows tray update).
+Use this file and the current `dist/SHA256SUMS.txt` when preparing downloads.
+The earlier `dist/memory-update/` build and `gta-dot-*` files are superseded.
 
 SHA-256:
 
 ```text
-d318d6afefe560f6a54abbdf12169cee91cd9d7ecda6c84eb19372112227f6b0
+a498b9ba74921bf34b879069aee2d22013a427ae6a05332192e2d4a8855a100b
 ```
 
 The app retains the chosen PolyForm Noncommercial 1.0.0 license and third-party

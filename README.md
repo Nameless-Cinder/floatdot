@@ -32,6 +32,9 @@ OpenAI, and does not include a ChatGPT account or subscription.
   with a lavender ring as its fallback.
 - **Your own account:** sign in through ChatGPT's website and choose your own Dot
   or conversation. No API-key configuration or separate FloatDot account.
+- **Windows system tray:** the floating dot stays visible, with a small tray
+  icon instead of a regular taskbar button. Click the tray icon to open FloatDot;
+  right-click it for Settings or Quit.
 
 ## Get started
 
@@ -71,8 +74,12 @@ Electron; no separate frontend build is needed.
 | Toggle on Windows / Linux | **Ctrl+Shift+D** |
 | Toggle on macOS | **Command+Shift+D** |
 | Exit completely | Right-click → **Quit FloatDot** |
-| Exit with keyboard / system Close | **Ctrl+Q** / **Command+Q**, **Alt+F4** on Windows, or taskbar Close |
+| Exit with keyboard / system Close | **Ctrl+Q** / **Command+Q**, or **Alt+F4** on Windows |
 | Choose memory and badge behavior | Right-click → **Settings** |
+| Open from the Windows tray | Click the FloatDot icon beside the clock |
+
+Windows may initially place the tray icon in its **^** overflow area. You can
+drag it beside the clock if you want it always visible.
 
 The global toggle shortcut works when it is available on your system. Clicking
 the top bar or pressing **Esc** collapses the window. An operating-system Close

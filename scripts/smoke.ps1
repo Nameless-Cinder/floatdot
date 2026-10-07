@@ -1,4 +1,4 @@
-param([switch]$Restart, [switch]$Interactive, [switch]$Quick, [switch]$Regression, [switch]$Package, [switch]$VerifyPackage, [switch]$Icons, [switch]$Security, [switch]$Memory, [string]$BuildDirectory = 'dist')
+param([switch]$Restart, [switch]$Interactive, [switch]$Quick, [switch]$Regression, [switch]$Package, [switch]$VerifyPackage, [switch]$Icons, [switch]$Security, [switch]$Memory, [switch]$Tray, [string]$BuildDirectory = 'dist')
 $ErrorActionPreference = 'Stop'
 $scriptDirectory = if ($PSScriptRoot) { $PSScriptRoot } else { Join-Path (Get-Location).Path 'scripts' }
 $project = Split-Path -Parent $scriptDirectory
@@ -48,8 +48,8 @@ public sealed class DotTestJob : IDisposable {
 }
 '@
 }
-$env:DOT_SMOKE_PROFILE = Join-Path $output $(if ($Memory) { 'memory-profile' } elseif ($Regression) { 'regression-profile' } else { 'profile' })
-$env:DOT_SMOKE_RUNNER = Join-Path $scriptDirectory $(if ($Memory) { 'memory.cjs' } elseif ($Regression) { 'regression.cjs' } else { 'smoke.cjs' })
+$env:DOT_SMOKE_PROFILE = Join-Path $output $(if ($Tray) { 'tray-profile' } elseif ($Memory) { 'memory-profile' } elseif ($Regression) { 'regression-profile' } else { 'profile' })
+$env:DOT_SMOKE_RUNNER = Join-Path $scriptDirectory $(if ($Tray) { 'tray.cjs' } elseif ($Memory) { 'memory.cjs' } elseif ($Regression) { 'regression.cjs' } else { 'smoke.cjs' })
 $env:DOT_SMOKE_RESTART = if ($Restart) { '1' } else { '' }
 $env:DOT_SMOKE_INTERACTIVE = if ($Interactive) { '1' } else { '' }
 $env:DOT_SMOKE_QUICK = if ($Quick) { '1' } else { '' }

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, Menu, screen, shell, globalShortcut, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, Menu, Tray, screen, shell, globalShortcut, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -27,6 +27,7 @@ const PARTITION = 'persist:chatgpt-dot';
 const UI_FILE = path.join(__dirname, 'renderer', 'index.html');
 const UI_URL = pathToFileURL(UI_FILE).href;
 let win, chat, preferences, preferencesFile, cssKey, saveTimer, dragTimer, drag;
+let tray, trayTooltip = '';
 let expanded = false;
 let unread = 0;
 let quitting = false;
@@ -121,6 +122,37 @@ function scheduleAppearance() {
 
 function broadcast() {
   if (win && !win.isDestroyed()) win.webContents.send('dot:state', state());
+  updateTray();
+}
+
+function updateTray() {
+  if (!tray || tray.isDestroyed() || quitting) return;
+  const tooltip = ['FloatDot', unread ? `${unread} unread` : '', sleeping ? 'Sleeping — unread detection paused' : '', 'Click to open · Right-click for Settings or Quit'].filter(Boolean).join('\n');
+  if (tooltip !== trayTooltip) { tray.setToolTip(tooltip); trayTooltip = tooltip; }
+}
+
+function showFloatDot() {
+  if (quitting || !win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  void setExpanded(true);
+}
+
+function createTray() {
+  if (process.platform !== 'win32') return;
+  try {
+    // No GUID: unsigned development builds can move between directories.
+    tray = new Tray(path.join(ICON_DIR, 'icon.ico'));
+    tray.on('click', showFloatDot);
+    tray.on('double-click', showFloatDot);
+    // Build on demand so checked settings and navigation state are current.
+    tray.on('right-click', () => tray.popUpContextMenu(createMenu()));
+    updateTray();
+  } catch (error) {
+    // Keep a conventional way to reach the app if Windows cannot create a tray.
+    win.setSkipTaskbar(false);
+    console.warn('Could not create the FloatDot tray icon:', error.message);
+  }
 }
 
 function concealSurface() {
@@ -335,9 +367,9 @@ function setMemorySaver(enabled) {
   broadcast();
 }
 
-function showMenu() {
-  Menu.buildFromTemplate([
-    { label: expanded ? 'Collapse to dot' : 'Open FloatDot', click: () => setExpanded(!expanded) },
+function createMenu() {
+  return Menu.buildFromTemplate([
+    { label: expanded ? 'Collapse to dot' : 'Open FloatDot', click: () => { if (expanded) setExpanded(false); else showFloatDot(); } },
     { label: 'Go to my Dot', enabled: !!preferences.dotUrl, click: () => { navigate(preferences.dotUrl); setExpanded(true); } },
     { label: 'ChatGPT home / choose another conversation', click: () => { navigate(HOME); setExpanded(true); } },
     { label: 'Set current page as my Dot', visible: !!preferences.dotUrl, enabled: !!chat && !isSelected(), click: saveCurrent },
@@ -351,8 +383,10 @@ function showMenu() {
     { label: sleeping ? 'Sleeping — click the dot to reload' : 'ChatGPT is loaded', enabled: false },
     { type: 'separator' },
     { label: 'Quit FloatDot', accelerator: 'CommandOrControl+Q', click: () => app.quit() },
-  ]).popup({ window: win });
+  ]);
 }
+
+function showMenu() { createMenu().popup({ window: win }); }
 
 function installWebGuards(contents) {
   contents.on('before-input-event', (event, input) => {
@@ -530,6 +564,7 @@ async function createWindow() {
     frame: false, transparent: true, backgroundColor: '#00000000', alwaysOnTop: true,
     resizable: false, maximizable: false, fullscreenable: false, hasShadow: false,
     autoHideMenuBar: true, show: false,
+    skipTaskbar: process.platform === 'win32',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false },
   });
   if (process.platform === 'win32') {
@@ -600,6 +635,7 @@ async function createWindow() {
   await win.loadFile(UI_FILE);
   await uiReady;
   win.show();
+  createTray();
   keepOnTop();
   // Windows may finish applying transparent-window styles after the first show.
   setTimeout(keepOnTop, 500);
@@ -612,16 +648,17 @@ async function createWindow() {
 if (!app.isPackaged && process.env.DOT_SMOKE_PROFILE) app.setPath('userData', process.env.DOT_SMOKE_PROFILE);
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', () => { if (win) { win.show(); setExpanded(true); } });
+  app.on('second-instance', showFloatDot);
   app.whenReady().then(createWindow).then(async () => {
     if (!app.isPackaged && process.env.DOT_SMOKE_PROFILE && process.env.DOT_SMOKE_RUNNER) {
-      await require(process.env.DOT_SMOKE_RUNNER)({ app, win, chat, getChat: () => chat, setExpanded, state, preferences, savePreferences, fitBounds, configureAdapter, sleepChat, setMemorySaver });
+      await require(process.env.DOT_SMOKE_RUNNER)({ app, win, chat, getChat: () => chat, getTray: () => tray, createMenu, setExpanded, state, preferences, savePreferences, fitBounds, configureAdapter, sleepChat, setMemorySaver });
     }
   }).catch((error) => { console.error(error); app.exit(1); });
 }
-app.on('activate', () => { if (win && !win.isDestroyed()) { win.show(); setExpanded(true); } });
+app.on('activate', showFloatDot);
 app.on('before-quit', () => {
   quitting = true;
+  if (tray && !tray.isDestroyed()) tray.destroy();
   clearInterval(dragTimer);
   sleepRevision++;
   clearTimeout(sleepTimer);
