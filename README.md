@@ -12,6 +12,8 @@ required.
 An independent, unofficial app. FloatDot is not affiliated with or endorsed by
 OpenAI, and does not include a ChatGPT account or subscription.
 
+[![Support FloatDot on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/namelesscinder)
+
 [Get started](#get-started) · [Features](#features) · [Platforms](#platforms) ·
 [FAQs](#frequently-asked-questions) · [Privacy](docs/PRIVACY.md) ·
 [Support](#support-floatdot) · [License](#license)
@@ -229,8 +231,6 @@ and logs before attaching them.
 If FloatDot makes your day a little easier, you can
 [support its development on Ko-fi](https://ko-fi.com/namelesscinder).
 Donations are entirely optional and help with ongoing development and maintenance.
-
-[![Support FloatDot on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/namelesscinder)
 
 Sharing FloatDot, reporting bugs, and suggesting improvements also help. Thank you!
 
