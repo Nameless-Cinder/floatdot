@@ -6,14 +6,14 @@ const path = require('node:path');
 const { screen } = require('electron');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-module.exports = async ({ app, win, chat, setExpanded, state, preferences }) => {
+module.exports = async ({ app, win, chat, setExpanded, state, preferences, createMenu, setMemorySaver }) => {
   const checks = [];
   const animationTimings = [];
   const directory = path.dirname(process.env.DOT_SMOKE_PROFILE);
   const run = (code) => chat.webContents.executeJavaScript(code);
   let failed = false;
   try {
-    const fixture = '<!doctype html><main><main id="messages"><article class="message-row" data-message-id="old"><div class="message-body" data-message-id="old"><div class="message-bubble"><div class="message-text">Earlier reply</div></div></div></article></main></main>';
+    const fixture = '<!doctype html><main id="empty-shell"></main><main><main class="thread-pane" id="messages"><article class="message-row" data-message-id="old"><div class="message-body" data-message-id="old"><div class="message-bubble"><div class="message-text">Earlier reply</div></div></div></article></main></main>';
     await chat.webContents.session.protocol.handle('https', () => new Response(fixture, { headers: { 'content-type': 'text/html' } }));
     await chat.webContents.loadURL('https://chatgpt.com/dots/regression');
     await run('window.liveSentinel = 123');
@@ -121,6 +121,7 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences }) => 
     assert.equal(state().unread, 2);
     assert.equal(await win.webContents.executeJavaScript('document.querySelector("#badge").textContent'), '2');
     checks.push('Actual Dot row selectors count short replies once, excluding self messages, empty rows, nested duplicate IDs and prepended history');
+    checks.push('The active Dot messaging pane is observed even when an empty shell main precedes it');
     await setExpanded(true);
     assert.equal(state().unread, 0);
     await add('visible-reply', 'Already read');
@@ -148,6 +149,16 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences }) => 
     assert.equal(state().unread, 0, 'Sidebar notification previews are not Dot messages');
     checks.push('Task metadata and sidebar message previews do not produce unread replies');
 
+    await run(`document.querySelector('#empty-shell').insertAdjacentHTML('beforeend',
+      '<article class="message-row" data-message-id="shell-preview"><div class="message-text">Unrelated shell preview</div></article>')`);
+    await sleep(350);
+    assert.equal(state().unread, 0, 'Dot-shaped rows outside the messaging pane cannot count');
+    await run(`document.body.insertAdjacentHTML('beforeend', '<main class="thread-pane" id="ambiguous-pane"><article class="message-row" data-message-id="ambiguous"><div class="message-text">Ambiguous pane</div></article></main>')`);
+    await sleep(350);
+    assert.equal(state().unread, 0, 'Multiple active messaging panes must fail quietly');
+    await run(`document.querySelector('#ambiguous-pane').remove()`);
+    checks.push('Dot-shaped shell previews and ambiguous messaging panes cannot produce badges');
+
     await add('dot-after-other-chat', 'A real new Dot reply');
     assert.equal(state().unread, 1, 'Filtering unrelated content must preserve real Dot reply notifications');
     await setExpanded(true);
@@ -163,6 +174,7 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences }) => 
     checks.push('Real Dot replies still count; a missing Dot timeline fails quietly');
 
     await chat.webContents.loadURL('https://chatgpt.com/c/notification-scope');
+    await run(`document.querySelector('#empty-shell').remove()`);
     await run(`document.querySelector('#messages').innerHTML =
       '<div data-message-author-role="assistant" data-message-id="regular-old">Earlier regular reply</div>'`);
     await win.webContents.executeJavaScript('window.dot.saveCurrent()');
@@ -172,6 +184,53 @@ module.exports = async ({ app, win, chat, setExpanded, state, preferences }) => 
     await sleep(350);
     assert.equal(state().unread, 1, 'Explicitly saved regular conversations must still receive their own reply badges');
     checks.push('A saved regular conversation retains its own assistant reply notifications');
+
+    const legacyDot = 'https://chatgpt.com/dots/00000000-0000-0000-0000-000000000001';
+    const openSavedDot = async () => {
+      const loaded = new Promise(resolve => chat.webContents.once('did-finish-load', resolve));
+      createMenu().items.find(item => item.label === 'Back to my Dot').click();
+      await loaded;
+      await sleep(200);
+    };
+    preferences.dotUrl = legacyDot;
+    setMemorySaver(false);
+    await openSavedDot();
+    await run(`history.replaceState(null, '', '/dots/home')`);
+    await sleep(2200);
+    assert.equal(preferences.dotUrl, 'https://chatgpt.com/dots/home');
+    assert.equal(state().selected, true);
+    assert.equal(state().memorySaver, false);
+    const migrated = JSON.parse(fs.readFileSync(path.join(process.env.DOT_SMOKE_PROFILE, 'dot-preferences.json'), 'utf8'));
+    assert.equal(migrated.dotUrl, preferences.dotUrl);
+    assert.equal(migrated.memorySaver, false);
+    await setExpanded(false);
+    await add('canonical-reply', 'Reply after canonical redirect');
+    assert.equal(state().unread, 1);
+    assert.equal(await win.webContents.executeJavaScript('document.querySelector("#badge").textContent'), '1');
+    await setExpanded(true);
+    assert.equal(state().unread, 0);
+    checks.push('Saved legacy Dot redirect to /dots/home stays selected, persists Live Updates, counts IPC through the badge, and clears on opening');
+
+    preferences.dotUrl = legacyDot;
+    await openSavedDot();
+    await run(`history.pushState(null, '', '/c/another-conversation')`);
+    await sleep(100);
+    await run(`history.pushState(null, '', '/dots/home')`);
+    await sleep(2200);
+    assert.equal(preferences.dotUrl, legacyDot);
+    assert.equal(state().selected, false);
+    await setExpanded(false);
+    await add('unselected-reply', 'Must stay unselected');
+    assert.equal(state().unread, 0);
+    checks.push('Navigating away cancels redirect adoption; another page cannot become the saved Dot or produce badges');
+
+    preferences.dotUrl = 'https://chatgpt.com/c/saved-conversation';
+    await openSavedDot();
+    await run(`history.replaceState(null, '', '/dots/home')`);
+    await sleep(200);
+    assert.equal(preferences.dotUrl, 'https://chatgpt.com/c/saved-conversation');
+    assert.equal(state().selected, false);
+    checks.push('Ordinary saved conversations never migrate to Dot home');
     await sleep(300);
     const saved = JSON.parse(fs.readFileSync(path.join(process.env.DOT_SMOKE_PROFILE, 'dot-preferences.json'), 'utf8'));
     assert.deepEqual(saved.position, anchor);

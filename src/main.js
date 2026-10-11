@@ -40,6 +40,7 @@ let reducedMotion = false;
 let motionSequence = 0;
 let lastPreview = null;
 let sleepTimer, sleeping = false, resumeUrl = null, mediaInUse = false, sleepRevision = 0;
+let pendingDotHomeRedirect = null;
 const SLEEP_AFTER_MS = 60_000;
 const popups = new Set();
 
@@ -50,6 +51,20 @@ function pageKey(value) {
 
 function isSelected() {
   return !!chat && !!preferences.dotUrl && pageKey(chat.webContents.getURL()) === pageKey(preferences.dotUrl);
+}
+
+// ChatGPT now replaces legacy Dot UUID routes with /dots/home during startup.
+// Follow only that first redirect from an explicitly loaded saved Dot; never
+// treat arbitrary Dot pages or ordinary conversation navigation as selected.
+function followDotHomeRedirect(url) {
+  const previous = pendingDotHomeRedirect;
+  if (!previous || pageKey(url) === pageKey(previous)) return;
+  pendingDotHomeRedirect = null;
+  if (pageKey(preferences.dotUrl) !== pageKey(previous)
+    || pageKey(url) !== 'https://chatgpt.com/dots/home') return;
+  preferences.dotUrl = url;
+  if (!savePreferences()) { preferences.dotUrl = previous; return; }
+  resumeUrl = url;
 }
 
 function readPreferences() {
@@ -298,6 +313,9 @@ function navigate(url) {
   sleeping = false;
   resumeUrl = url;
   const contents = chat.webContents;
+  pendingDotHomeRedirect = pageKey(url) === pageKey(preferences.dotUrl)
+    && /^https:\/\/chatgpt\.com\/dots\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/?$/i.test(url)
+    ? url : null;
   lastPreview = null;
   status = 'Loading ChatGPT…';
   broadcast();
@@ -530,13 +548,17 @@ function createChat() {
   });
   // Same-document route changes can leave a microphone stream running. Only
   // a committed replacement document ends that conservative sleep exemption.
-  contents.on('did-navigate', () => { if (chat === view) mediaInUse = false; });
+  contents.on('did-navigate', (_event, url) => {
+    if (chat !== view) return;
+    mediaInUse = false;
+    followDotHomeRedirect(url);
+  });
   contents.on('dom-ready', () => {
     if (chat !== view) return;
     cssKey = null; lastPreview = null; void configureAdapter();
   });
-  contents.on('did-navigate-in-page', (_event, _url, isMainFrame) => {
-    if (chat === view && isMainFrame) { status = ''; void configureAdapter(); scheduleSleep(); }
+  contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+    if (chat === view && isMainFrame) { followDotHomeRedirect(url); status = ''; void configureAdapter(); scheduleSleep(); }
   });
   contents.on('did-finish-load', () => {
     if (chat !== view) return;

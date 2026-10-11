@@ -9,6 +9,7 @@ const SELECTORS = {
   turn: '[data-testid^="conversation-turn-"]',
   user: '[data-message-author-role="user"], article.message-row.self',
   conversation: 'main',
+  dotConversation: 'main.thread-pane',
   unrelated: 'aside, nav, [role="dialog"], [role="alert"], [role="status"], [hidden], [aria-hidden="true"]',
 };
 
@@ -44,12 +45,18 @@ function installObserver(ipcRenderer) {
   }
 
   function snapshot() {
-    const root = document.querySelector(SELECTORS.conversation);
-    if (!root) return { kind: 'none', messages: [] };
     // The app shell may also render other chats or notification previews while
     // the URL stays on the saved Dot. Never mix their assistant roles into the
     // Dot timeline, even when the timeline is temporarily empty/loading.
     const dotPage = /^\/dots\/[^/]+\/?$/.test(location.pathname);
+    // The Work shell retains an empty main before the actual Dot timeline.
+    // Require one unambiguous, active messaging pane instead of the first main
+    // or a page-wide search that could include another chat/preview.
+    const panes = dotPage ? [...document.querySelectorAll(SELECTORS.dotConversation)]
+      .filter(element => !element.closest(SELECTORS.unrelated)) : [];
+    const root = dotPage ? (panes.length === 1 ? panes[0] : null)
+      : document.querySelector(SELECTORS.conversation);
+    if (!root) return { kind: 'none', messages: [] };
     const selector = dotPage ? SELECTORS.dotAssistant : SELECTORS.assistant;
     const messages = [...root.querySelectorAll(selector)]
       .filter(element => !element.closest(SELECTORS.unrelated) && !element.closest(SELECTORS.user))
