@@ -43,20 +43,19 @@ OpenAI, and does not include a ChatGPT account or subscription.
 FloatDot is an early desktop MVP. There is no published GitHub release yet.
 Run it from source, or build an installer using the
 [development guide](docs/DEVELOPMENT.md). When downloads are published, they
-will appear on the [Releases page](https://github.com/M0hamedd/floatdot/releases).
+will appear on the [Releases page](https://github.com/Nameless-Cinder/floatdot/releases).
 
 Install Git and Node.js 24, then run:
 
 ```sh
-git clone https://github.com/M0hamedd/floatdot.git
+git clone https://github.com/Nameless-Cinder/floatdot.git
 cd floatdot
 npm ci
 npm start
 ```
 
-While the repository is private, you need access to clone it. On Windows, use
-`npm.cmd` if PowerShell blocks `npm.ps1`. Dependency installation downloads
-Electron; no separate frontend build is needed.
+On Windows, use `npm.cmd` if PowerShell blocks `npm.ps1`. Dependency
+installation downloads Electron; no separate frontend build is needed.
 
 ### Choose your Dot
 
@@ -213,7 +212,7 @@ The source is available under **PolyForm Noncommercial 1.0.0**. Use,
 modification, and sharing are permitted under the license's noncommercial
 terms. Commercial use requires separate permission from the copyright holder.
 The [full license](LICENSE.md) controls; it is not an unrestricted open-source
-license. Contact [M0hamedd](https://github.com/M0hamedd) for commercial permission.
+license. Contact [Nameless-Cinder](https://github.com/Nameless-Cinder) for commercial permission.
 
 ## Development and feedback
 
@@ -221,7 +220,7 @@ See the [development guide](docs/DEVELOPMENT.md) for builds, platform caveats,
 architecture, and verification. Read [CONTRIBUTING.md](CONTRIBUTING.md) before
 submitting a change.
 
-For bugs or feature requests, [open an issue](https://github.com/M0hamedd/floatdot/issues)
+For bugs or feature requests, [open an issue](https://github.com/Nameless-Cinder/floatdot/issues)
 with your operating system, app version, steps to reproduce, and expected
 behavior. Remove conversation text, account details, and tokens from screenshots
 and logs before attaching them.
